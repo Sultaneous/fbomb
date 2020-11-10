@@ -393,6 +393,7 @@ def extractUP(s):
 # TODO: Convert from linear to state machine
 def stateMachine(con, addr):
    # Start FBOMB protocol communication
+   result=False
    request=getRequest(con)
    if (request.upper().startswith("HI ")):
       if (config._auth):
@@ -412,11 +413,11 @@ def stateMachine(con, addr):
                 isalert=True)
             result=False
 
-      if (not result):
-         response = f"NOK Bad user:pwd"
-         sendResponse(con, response)
-         con.close()
-         return
+         if (not result):
+            response = f"NOK Bad user:pwd"
+            sendResponse(con, response)
+            con.close()
+            return
 
       # No authentication or was authenticated
       response = f"OK {config.sid}"
