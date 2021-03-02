@@ -254,7 +254,7 @@ def manageAccount(arg="null", action=ACTMGR_ACTIONS.ADD_USER):
       if (not mgr.addUser(user, passwordHash)):
          error(f"Failed to add {user} with password {paswordHash}.")
       pip(f"New user {user} successfully added.")
-   
+
    elif (action==ACTMGR_ACTIONS.LIST_USERS):
       data=mgr.listUsers()
       notex(f"{C.cwh}{'ID':<3}{'User':<12}" \
@@ -262,7 +262,7 @@ def manageAccount(arg="null", action=ACTMGR_ACTIONS.ADD_USER):
       for record in data:
          notex(f"{C.clgy}{record[0]:<3}{record[1]:<12}{record[2]:<65}"\
                f"{record[3][0:10]:<10}")
-   
+
    elif (action==ACTMGR_ACTIONS.DELETE_USER):
       if (arg=="null" or arg==""):
          error(f"Malformed user '{arg}'. Please specify valid user. " \
@@ -272,7 +272,7 @@ def manageAccount(arg="null", action=ACTMGR_ACTIONS.ADD_USER):
       else:
          error(f"User {arg} could not be deleted. May not exist. "\
                f"Use --list to see all users.")
-         
+
    elif (action==ACTMGR_ACTIONS.UPDATE_USER):
       valid, user, password=extractUP(arg)
       if (not valid):
@@ -387,7 +387,7 @@ def extractUP(s):
    user=ss[0]
    password=ss[1]
    return(True, user, password)
-   
+
 
 # Handles the protocol
 # TODO: Convert from linear to state machine
@@ -451,45 +451,49 @@ def stateMachine(con, addr):
 
 # From:
 # https://stackoverflow.com/questions/9532499/check-whether-a-path-is-valid-in-python-without-creating-a-file-at-the-paths-ta/9532586
+# There was a problem with ERROR_INVALID_FILE not being defined under NT (but fine in Linux) so
+# this was replaced with the value 123 to ensure NT portability.
 def isSafeFilename(pathname: str) -> bool:
-    '''
-    `True` if the passed pathname is a valid pathname for the current OS;
-    `False` otherwise.
-    '''
-    # If this pathname is either not a string or is but is empty, this pathname
-    # is invalid.
-    try:
-        if not isinstance(pathname, str) or not pathname:
-            return False
+   '''
+   `True` if the passed pathname is a valid pathname for the current OS;
+   `False` otherwise.
+   '''
+   ERROR_INVALID_NAME=123
 
-        # Strip this pathname's Windows-specific drive specifier (e.g., `C:\`)
-        # if any. Since Windows prohibits path components from containing `:`
-        # characters, failing to strip this `:`-suffixed prefix would
-        # erroneously invalidate all valid absolute Windows pathnames.
-        _, pathname = os.path.splitdrive(pathname)
+   # If this pathname is either not a string or is but is empty, this pathname
+   # is invalid.
+   try:
+      if not isinstance(pathname, str) or not pathname:
+         return False
 
-        # Directory guaranteed to exist. If the current OS is Windows, this is
-        # the drive to which Windows was installed (e.g., the "%HOMEDRIVE%"
-        # environment variable); else, the typical root directory.
-        root_dirname = os.environ.get('HOMEDRIVE', 'C:') \
-            if sys.platform == 'win32' else os.path.sep
-        assert os.path.isdir(root_dirname)  
+      # Strip this pathname's Windows-specific drive specifier (e.g., `C:\`)
+      # if any. Since Windows prohibits path components from containing `:`
+      # characters, failing to strip this `:`-suffixed prefix would
+      # erroneously invalidate all valid absolute Windows pathnames.
+      _, pathname = os.path.splitdrive(pathname)
 
-        # Append a path separator to this directory if needed.
-        root_dirname = root_dirname.rstrip(os.path.sep) + os.path.sep
+      # Directory guaranteed to exist. If the current OS is Windows, this is
+      # the drive to which Windows was installed (e.g., the "%HOMEDRIVE%"
+      # environment variable); else, the typical root directory.
+      root_dirname = os.environ.get('HOMEDRIVE', 'C:') \
+         if sys.platform == 'win32' else os.path.sep
+      assert os.path.isdir(root_dirname)
 
-        # Test whether each path component split from this pathname is valid or
-        # not, ignoring non-existent and non-readable path components.
-        for pathname_part in pathname.split(os.path.sep):
-            try:
-                os.lstat(root_dirname + pathname_part)
+      # Append a path separator to this directory if needed.
+      root_dirname = root_dirname.rstrip(os.path.sep) + os.path.sep
+
+      # Test whether each path component split from this pathname is valid or
+      # not, ignoring non-existent and non-readable path components.
+      for pathname_part in pathname.split(os.path.sep):
+         try:
+            os.lstat(root_dirname + pathname_part)
             # If an OS-specific exception is raised, its error code
             # indicates whether this pathname is valid or not. Unless this
             # is the case, this exception implies an ignorable kernel or
             # filesystem complaint (e.g., path not found or inaccessible).
-            #
+
             # Only the following exceptions indicate invalid pathnames:
-            #
+
             # * Instances of the Windows-specific "WindowsError" class
             #   defining the "winerror" attribute whose value is
             #   "ERROR_INVALID_NAME". Under Windows, "winerror" is more
@@ -501,20 +505,23 @@ def isSafeFilename(pathname: str) -> bool:
             #   generic "errno" attribute whose value is either:
             #   * Under most POSIX-compatible OSes, "ENAMETOOLONG".
             #   * Under some edge-case OSes (e.g., SunOS, *BSD), "ERANGE".
-            except OSError as exc:
-                if hasattr(exc, 'winerror'):
-                    if exc.winerror == ERROR_INVALID_NAME:
-                        return False
-                elif exc.errno in {errno.ENAMETOOLONG, errno.ERANGE}:
-                    return False
-    # If a "TypeError" exception was raised, it almost certainly has the
-    # error message "embedded NUL character" indicating an invalid pathname.
-    except TypeError as exc:
-        return False
-    # If no exception was raised, all path components and hence this
-    # pathname itself are valid.
-    else:
-        return True
+            # NOTE: ERROR_INVALID_NAME=123 and the constant isn't portable.
+         except OSError as exc:
+            if hasattr(exc, 'winerror'):
+               if exc.winerror == ERROR_INVALID_NAME:
+                  return False
+            elif exc.errno in {errno.ENAMETOOLONG, errno.ERANGE}:
+               return False
+
+   # If a "TypeError" exception was raised, it almost certainly has the
+   # error message "embedded NUL character" indicating an invalid pathname.
+   except TypeError as exc:
+      return False
+
+   # If no exception was raised, all path components and hence this
+   # pathname itself are valid.
+   else:
+      return True
 
 # Shows the info, blurb, syntax and options screen.
 def showHelp():
