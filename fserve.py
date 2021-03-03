@@ -41,6 +41,7 @@ import errno
 import datetime
 import ntpath
 import socket
+import select
 import signal
 import os
 import hashlib
@@ -243,6 +244,7 @@ def notex(message):
 # Note that password is salted with username.
 # The default action is "add", but "delete", "list" and "update" are
 # also supported.
+# KAS 210302 Fixed a password creation bug in add user
 def manageAccount(arg="null", action=ACTMGR_ACTIONS.ADD_USER):
    # Validate and sanitize
    mgr=config._accountmanager
@@ -251,7 +253,7 @@ def manageAccount(arg="null", action=ACTMGR_ACTIONS.ADD_USER):
       if (not valid):
          error(f"Wrong format '{arg}'. To add a user account with a password, use form \"user:password\"")
       passwordHash=AccountManager.saltPassword(user, password)
-      if (not mgr.addUser(user, passwordHash)):
+      if (not mgr.addUser(user, password)):
          error(f"Failed to add {user} with password {paswordHash}.")
       pip(f"New user {user} successfully added.")
 
@@ -665,13 +667,21 @@ def parseCommandLine():
    return(config)
 
 
+# Main function sets up server socket, and handles connections until CTRL-C or error.
+# 210302 Cross-platform portability issue detected.  Socket.accept() is blocking by default.
+#        However, on linux it will accept a CTRL-C and abort.  In Windows 10, it does not
+#        interrupt the blocking call, and instead buffers the CTRL-C to be processed after the
+#        accept() call returns!  This makes it hard to exit the server on Windows.  Python
+#        does allow you to set sockets to non-blocking, but I wanted blocking reads and writes.
+#        So the solution was to use select.select() (which is blocking as well, BUT can accept
+#        a timeout value).
 def main():
    # Register signal handler
    signal.signal(signal.SIGINT, onSignal_kill)
 
    global config
    config=Config()
-   
+
    print (f"{C.cly}{C.bdb}{APP_NAME}{C.boff} v{APP_VERSION} by {APP_AUTHOR} {APP_DATE} {APP_EMAIL}{C.off}")
    config=parseCommandLine()
 
@@ -706,24 +716,34 @@ def main():
    except socket.error as e:
       error(f"Network error occurred: {e}")
 
+   # Setup for select loop
+   sock.listen()
+   inputs=[sock]
+   dummy=[]
    connections=0
+
    while True:
       try:
-         sock.listen()
-         con,addr = sock.accept()
-         config._timer=Timer()
-         config._timer.start()
-         connections+=1
-         notex(f"{C.clg}{C.bdg}Connection from:{C.boff} {addr}")
+         # select guarantees a connection is available; a 1 second timeout lets Windows
+         # process the CTRL-C without being blocked
+         readable, writable, exceptionable = select.select(inputs, dummy, dummy, 1)
 
-         stateMachine(con,addr)
+         for s in readable:
+            con,addr = s.accept()
+            config._timer=Timer()
+            config._timer.start()
+            connections+=1
+            notex(f"{C.clg}{C.bdg}Connection from:{C.boff} {addr}")
 
-         config._timer.stop()
-         pip (f"Listening... Handled {connections} connections so far.")
+            stateMachine(con,addr)
 
-         # Flush any pending logs to the file
-         if FLAG_LOGOPEN:
-            logfilehandle.flush()
+            config._timer.stop()
+            pip (f"Listening... Handled {connections} connections so far.")
+
+            # Flush any pending logs to the file
+            if FLAG_LOGOPEN:
+               logfilehandle.flush()
+
       except socket.error as e:
          error(f"Network error occurred: {e}")
 
