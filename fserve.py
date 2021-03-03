@@ -692,8 +692,9 @@ def main():
    # Inbound directory must exist
    if not os.path.isdir(config.home):
       error("Invalid home (inbound) directory: "+config.home)
-
-   note(f"{C.clg}{C.bdg}Verbose Mode{C.boff}{C.clc} is on. Outputting details.")
+   
+   if (config.isverbose):
+      note(f"{C.clg}{C.bdg}Verbose Mode{C.boff}{C.clc} is on. Outputting details.")
 
    if (config.isoverwrite):
       note(f"{C.clg}{C.bdg}Overwrite Mode{C.boff}{C.clc} is on. Existing files can be replaced.")
